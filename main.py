@@ -401,14 +401,26 @@ class ShopApp:
         self.ui.wait_enter()
 
     def _show_recommendations(self):
+        """Hiển thị đề xuất sản phẩm - GIA DIỆN ĐƠN GIẢN"""
         self.ui.clear_screen()
-        self.ui.print_header("✨ ĐỀ XUẤT SẢN PHẨM THÔNG MINH")
+        self.ui.print_header("✨ ĐỀ XUẤT SẢN PHẨM DÀNH CHO BẠN")
         
         all_interactions = self.interaction_tracker.get_all_interactions_for_recommendation()
-        
         user_interactions = all_interactions.get(self.current_user.username, [])
         
+        # Kiểm tra user có tương tác chưa
         if not user_interactions:
+            print(f"\n⚠️ Bạn chưa có lịch sử tương tác!")
+            print(f"\n💡 HÃY BẮT ĐẦU:")
+            print(f"   1. Xem một vài sản phẩm")
+            print(f"   2. Thêm vào giỏ hàng")
+            print(f"   3. Mua sản phẩm")
+            print(f"\n🎁 Sau đó quay lại để nhận đề xuất cá nhân hóa!")
+            
+            # Hiển thị top bán chạy
+            print(f"\n{'='*70}")
+            print(f"💎 ĐANG HIỂN THỊ: TOP 10 SẢN PHẨM BÁN CHẠY")
+            print(f"{'='*70}")
             top_products = self.product_manager.get_top_selling(10)
             self.ui.display_product_list(top_products)
             
@@ -422,14 +434,13 @@ class ShopApp:
         
         purchased = self.order_manager.get_purchased_products(self.current_user.username)
         
+        print(f"\n⏳ Đang phân tích sở thích của bạn...")
         normalizer = WeightNormalizer()
         graph_engine = GraphEngine(normalizer)
         graph_data = graph_engine.build_graph(all_interactions)
         
-        # Tạo recommender TỐI ƯU
         recommender = Recommendation(graph_data, self.product_manager)
         
-        # Lấy đề xuất với TAG nguồn gốc
         recommendations = recommender.get_recommendations(
             username=self.current_user.username,
             top_n=10,
@@ -442,98 +453,36 @@ class ShopApp:
             self.ui.wait_enter()
             return
         
-        # ========================================
-        # HIỂN THỊ KẾT QUẢ DƯỚNG DẠNG BẢNG
-        # ========================================
-        print(f"\n{'='*70}")
-        print(f"✨ TOP {len(recommendations)} ĐỀ XUẤT THÔNG MINH")
-        print(f"{'='*70}")
+        print(f"\n{'='*80}")
+        print(f"✨ TOP {len(recommendations)} ĐỀ XUẤT DÀNH CHO BẠN")
+        print(f"{'='*80}")
         
-        # Cấu hình bảng
-        HEADER = f"{'#':<4} {'Tên sản phẩm':<32} {'Giá':>15} {'Điểm':>8} {'Nguồn':<10}"
-        self.ui.print_divider() 
-        print(HEADER)
-        self.ui.print_divider()
-
-        # Biểu tượng và Mô tả nguồn 
-        SOURCE_MAP = {
-            "WARM": ("🔥", "WARM"),
-            "COLLAB": ("🤝", "COLLAB"),
-            "CONTENT": ("📂", "CONTENT"),
-            "POPULAR": ("⭐", "POPULAR"),
-        }
+        print(f"\n{'STT':<6} {'ID':<10} {'Tên sản phẩm':<40} {'Giá':>15}")
+        print("-"*80)
         
-        # Duyệt và hiển thị
         for rank, (product_name, score, tag) in enumerate(recommendations, 1):
             matching = [p for p in self.product_manager.products if p.name == product_name]
+            
             if matching:
-                p = matching[0]
-                icon, label = SOURCE_MAP.get(tag, ('?', 'UNKNOWN'))
+                product = matching[0]
                 
-                # Định dạng
-                rank_str = f"#{rank}"
-                price_str = f"{p.price:,.0f}đ"
-                score_str = f"{score:.3f}"
-                source_str = f"{icon} {label}"
+                display_name = product.name if len(product.name) <= 38 else product.name[:37] + "…"
                 
-                # In ra dòng bảng
-                print(
-                    f"{rank_str:<4} "
-                    f"{p.name:<32} "
-                    f"{price_str:>15} "
-                    f"{score_str:>8} "
-                    f"{source_str:<10}"
-                )
-
-        print(f"{'='*70}")
-
-        # Phân loại theo tag (để phục vụ phần thống kê tiếp theo)
-        warm_items = [(p, s, t) for p, s, t in recommendations if t == "WARM"]
-        collab_items = [(p, s, t) for p, s, t in recommendations if t == "COLLAB"]
-        content_items = [(p, s, t) for p, s, t in recommendations if t == "CONTENT"]
-        popular_items = [(p, s, t) for p, s, t in recommendations if t == "POPULAR"]
+                price_str = f"{product.price:,.0f}đ"
+                
+                print(f"{rank:<5} {product.id:<10} {display_name:<40} {price_str:>15}")
         
-        # Thống kê nguồn gốc TỐI ƯU (giữ nguyên logic gốc)
-        print(f"\n📊 Phân tích nguồn đề xuất (Theo chiến lược 3 tầng):")
-        print(f"  1. 🔥 WARM Products (1-3): {len(warm_items)} sản phẩm (Conversion 15-40%)")
-        print(f"  2. 🤝 COLLABORATIVE (4-7): {len(collab_items)} sản phẩm (Conversion 8-15%)")
-        print(f"  3. 💡 DISCOVERY (8-10): {len(content_items) + len(popular_items)} sản phẩm (Conversion 3-8%)")
+        print("="*80)
         
-        # Tùy chọn xem giải thích
         self.ui.print_divider()
-        choice = input("\n❓ Xem giải thích chi tiết cho sản phẩm #1? (y/n): ").strip().lower()
-        if choice == 'y' and recommendations:
-            product_name = recommendations[0][0]
-            explanation = recommender.explain_recommendation(
-                self.current_user.username,
-                product_name
-            )
-            print(explanation)
-            self.ui.wait_enter()
+        pid = input("\n🔍 Nhập ID sản phẩm để xem chi tiết (Enter để quay lại): ").strip()
         
-        # Xem chi tiết sản phẩm
-        self.ui.print_divider()
-        rank_input = input("\n🔍 Nhập SỐ THỨ TỰ (#1, #2...) để xem chi tiết (Enter để quay lại): ").strip()
-        
-        if rank_input:
-            try:
-                # Xử lý input có dấu # hoặc không
-                rank = int(rank_input.replace('#', ''))
-                if 1 <= rank <= len(recommendations):
-                    product_name = recommendations[rank - 1][0]
-                    product = None
-                    for p in self.product_manager.products:
-                        if p.name == product_name:
-                            product = p
-                            break
-                    
-                    if product:
-                        self._view_product_detail(product)
-                else:
-                    print(f"❌ Số thứ tự không hợp lệ (1-{len(recommendations)})")
-                    self.ui.wait_enter()
-            except ValueError:
-                print("❌ Vui lòng nhập số!")
+        if pid:
+            product = self.product_manager.get_product_by_id(pid)
+            if product:
+                self._view_product_detail(product)
+            else:
+                print(f"❌ Không tìm thấy sản phẩm với ID: {pid}")
                 self.ui.wait_enter()
 
     def _interactions(self):
